@@ -1,0 +1,10 @@
+node_modules/
+server_backup.js
+server_before_*.js
+.env
+
+public/*_backup.html
+public/*_before_*.html
+public/bingo_before_*.html
+
+public/index-backup.html

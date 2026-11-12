@@ -1,0 +1,1243 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BINGO ETHIOPIA</title>
+
+<style>
+*{box-sizing:border-box}
+
+body{
+ margin:0;
+ padding:0 0 15px;
+ font-family:Arial,Helvetica,sans-serif;
+ background:#101b35;
+ color:#172238;
+ text-align:center;
+ font-size:12px;
+}
+
+header{
+ padding:17px 5px;
+ background:#fff;
+ color:#172238;
+ font-size:25px;
+ font-weight:900;
+ border:5px solid #f3cf20;
+ border-radius:24px 24px 0 0;
+}
+
+section{padding:10px 5px}
+
+h2{
+ color:#159b50;
+ font-size:19px;
+ font-weight:900;
+ margin:9px 0;
+}
+
+h3{
+ color:#172238;
+ font-size:14px;
+ font-weight:900;
+ margin:6px 0;
+}
+
+p{margin:7px 0}
+
+button{
+ padding:8px 11px;
+ margin:3px;
+ border:1px solid #ddd;
+ border-radius:8px;
+ font-size:11px;
+ font-weight:900;
+ cursor:pointer;
+}
+
+input{
+ width:90%;
+ max-width:350px;
+ padding:11px;
+ margin:5px;
+ border-radius:8px;
+ border:1px solid #aaa;
+ font-size:13px;
+}
+
+.gold{background:#f3cf20;color:#172238}
+.blue{background:#1764c0;color:white}
+.red{background:#d52e35;color:white}
+.green{background:#159b50;color:white}
+
+#autoButton,#voiceButton{
+ background:#596579;
+ color:white;
+ border:1px solid white;
+ min-width:95px;
+}
+
+#autoButton.active,#voiceButton.active{
+ background:#159b50;
+}
+
+#bingoButton{
+ display:none;
+ background:#159b50;
+ color:white;
+ font-size:20px;
+ padding:12px 28px;
+ border:2px solid #f3cf20;
+ animation:pulse .8s infinite alternate;
+}
+
+#game{display:none}
+
+#wallet,#roomPanel{
+ background:#f5f7fb;
+ border:2px solid #e1e5eb;
+ padding:12px;
+ margin:9px auto;
+ width:calc(100% - 12px);
+ max-width:430px;
+ border-radius:18px;
+}
+
+#coinBalance{
+ color:#159b50;
+ font-size:22px;
+ font-weight:900;
+ margin:6px;
+}
+
+#depositHistory{
+ font-size:10px;
+ line-height:1.6;
+ color:#555;
+ margin-top:6px;
+}
+
+#connectionStatus{
+ color:#1764c0;
+ font-weight:900;
+}
+
+#roomStatus,#playerCount,#roomMessage{
+ color:#159b50;
+ font-weight:900;
+}
+
+#currentNumber{
+ font-size:34px;
+ font-weight:900;
+ color:#d52e35;
+ margin:9px;
+ min-height:40px;
+}
+
+#status{
+ color:#159b50;
+ font-weight:900;
+ min-height:25px;
+ margin:6px;
+ font-size:12px;
+}
+
+#cardHeaders,#card{
+ display:grid;
+ gap:2px;
+ width:100%;
+ max-width:430px;
+ margin:3px auto;
+}
+
+.column-label{
+ color:#1764c0;
+ font-size:15px;
+ font-weight:900;
+ padding:4px 0;
+}
+
+.cell{
+ background:#159b50;
+ color:white;
+ border:1px solid #08783a;
+ border-radius:7px;
+ aspect-ratio:1/1;
+ min-width:0;
+ display:flex;
+ align-items:center;
+ justify-content:center;
+ font-size:clamp(10px,3.5vw,15px);
+ font-weight:900;
+ cursor:pointer;
+ box-shadow:0 2px 4px rgba(0,0,0,.12);
+}
+
+.cell.marked{
+ background:#075d32;
+ color:white;
+ border:2px solid #f3cf20;
+}
+
+.cell.free{
+ background:#f3cf20;
+ color:#172238;
+ cursor:default;
+ font-size:10px;
+}
+
+.cell.empty{
+ background:#edf0f5;
+ border:1px solid #d9dfe8;
+ cursor:default;
+}
+
+#history{
+ width:calc(100% - 10px);
+ max-width:430px;
+ max-height:75px;
+ overflow-y:auto;
+ margin:8px auto;
+ padding:8px;
+ background:#f1f4f8;
+ color:#172238;
+ border:1px solid #dce1e8;
+ border-radius:9px;
+ min-height:35px;
+ overflow-wrap:anywhere;
+ line-height:1.7;
+ font-size:10px;
+}
+
+@keyframes pulse{
+ from{transform:scale(1)}
+ to{transform:scale(1.06)}
+}
+
+@media(max-width:380px){
+ header{font-size:21px;padding:12px 4px}
+ button{padding:6px 8px;font-size:10px}
+ #currentNumber{font-size:28px}
+ .column-label{font-size:13px}
+ .cell{font-size:11px}
+ #bingoButton{font-size:18px;padding:10px 22px}
+}
+</style>
+
+<!-- Multiplayer Socket.IO client -->
+<script src="/socket.io/socket.io.js"></script>
+</head>
+
+<body>
+
+<header>BINGO ETHIOPIA</header>
+
+<div id="wallet">
+ <h3>🪙 VIRTUAL COIN WALLET</h3>
+ <div id="coinBalance">1,000 Coins</div>
+ <p>FREE DEMO COIN DEPOSIT</p>
+ <button class="gold" onclick="depositCoins(100)">+100</button>
+ <button class="gold" onclick="depositCoins(500)">+500</button>
+ <button class="gold" onclick="depositCoins(1000)">+1,000</button>
+ <div id="depositHistory">No deposit yet</div>
+</div>
+
+<section id="home">
+ <h2>Welcome to Bingo Ethiopia</h2>
+
+ <div id="roomPanel">
+  <h3>🌐 MULTIPLAYER ROOM</h3>
+
+  <input id="playerName"
+   placeholder="Enter your player name"
+   autocomplete="name">
+
+  <script>
+   const savedPlayerName = localStorage.getItem("bingoPlayerName");
+   if(savedPlayerName){
+    document.getElementById("playerName").value = savedPlayerName;
+   }
+
+   document.getElementById("playerName").addEventListener("change", function(){
+    localStorage.setItem("bingoPlayerName", this.value.trim());
+   });
+  </script>
+
+  <input id="roomId"
+   placeholder="Enter Room ID">
+
+  <p>Choose Your Cards (1-3 cards)</p>
+
+  <select id="cardNumber1">
+   <option value="">Select Card 1</option>
+  </select>
+
+  <select id="cardNumber2">
+   <option value="">No second card</option>
+  </select>
+
+  <select id="cardNumber3">
+   <option value="">No third card</option>
+  </select>
+
+  <button class="gold" onclick="createRoom()">
+   CREATE ROOM
+  </button>
+
+  <button class="blue" onclick="joinRoomNow()">
+   JOIN ROOM
+  </button>
+
+  <p id="connectionStatus">Connecting to server...</p>
+  <p id="roomStatus">No room joined</p>
+  <p id="playerCount">Players: 0</p>
+  <p id="roomMessage"></p>
+ </div>
+
+ <p>Select Your Bingo Game</p>
+ <button class="gold" onclick="selectGame(75)">75-BALL BINGO</button>
+ <button class="gold" onclick="selectGame(90)">90-BALL BINGO</button>
+ <p>Virtual Coins Only</p>
+</section>
+
+<section id="game">
+
+ <h2 id="gameTitle">BINGO GAME</h2>
+
+ <div id="currentNumber">READY?</div>
+ <div id="status"></div>
+
+ <div style="margin:7px 0">
+  <button id="voiceButton" class="active"
+   onclick="toggleVoice()">VOICE: ON</button>
+  <button class="blue" onclick="repeatNumber()">🔁 REPEAT</button>
+ </div>
+
+ <button id="bingoButton" onclick="claimBingo()">BINGO! (5)</button>
+
+ <div id="cardHeaders"></div>
+ <div id="card"></div>
+
+ <div style="margin:8px 0">
+  <button id="autoButton" onclick="toggleAuto()">AUTO: OFF</button>
+ </div>
+
+ <button class="green" onclick="startGame()">START</button>
+ <button class="red" onclick="endGame()">END</button>
+ <button class="blue" onclick="goHome()">HOME</button>
+
+ <h3>Called Numbers</h3>
+ <div id="history">No numbers called yet</div>
+
+</section>
+
+<script>
+// ===============================
+// GAME VARIABLES
+// ===============================
+
+let mode=75;
+let timer=null;
+let claimTimer=null;
+let countdownTimer=null;
+
+let numbers=[];
+let called=[];
+let marked=[];
+let grid=[];
+
+let gameFinished=false;
+let pendingWin=null;
+let missedWins=new Set();
+let claimSeconds=5;
+
+let autoMarkEnabled=false;
+let voiceEnabled=true;
+let lastCalledLabel="";
+
+// ===============================
+// VIRTUAL COIN WALLET
+// ===============================
+
+let coinBalance=Number(localStorage.getItem("bingoCoins"));
+
+if(!Number.isFinite(coinBalance)){
+ coinBalance=1000;
+}
+
+let depositRecords=[];
+
+function updateWallet(){
+ document.getElementById("coinBalance").innerText=
+ coinBalance.toLocaleString()+" Coins";
+
+ localStorage.setItem("bingoCoins",coinBalance);
+}
+
+updateWallet();
+
+function depositCoins(amount){
+ coinBalance+=amount;
+ updateWallet();
+
+ depositRecords.unshift("+"+amount+" Coins - Demo Deposit");
+
+ document.getElementById("depositHistory").innerHTML=
+ depositRecords.slice(0,5).join("<br>");
+}
+
+// ===============================
+// RANDOM SHUFFLE
+// ===============================
+
+function shuffle(array){
+ for(let i=array.length-1;i>0;i--){
+  let j=Math.floor(Math.random()*(i+1));
+  [array[i],array[j]]=[array[j],array[i]];
+ }
+ return array;
+}
+
+// ===============================
+// VOICE CALLER
+// ===============================
+
+function toggleVoice(){
+ voiceEnabled=!voiceEnabled;
+
+ let button=document.getElementById("voiceButton");
+
+ if(voiceEnabled){
+  button.innerText="VOICE: ON";
+  button.classList.add("active");
+
+  if(lastCalledLabel)speakNumber(lastCalledLabel);
+
+ }else{
+  button.innerText="VOICE: OFF";
+  button.classList.remove("active");
+
+  if("speechSynthesis" in window){
+   window.speechSynthesis.cancel();
+  }
+ }
+}
+
+function numberWords(n){
+
+ let ones=[
+ "zero","one","two","three","four","five","six",
+ "seven","eight","nine","ten","eleven","twelve",
+ "thirteen","fourteen","fifteen","sixteen",
+ "seventeen","eighteen","nineteen"
+ ];
+
+ let tens=[
+ "","","twenty","thirty","forty","fifty",
+ "sixty","seventy","eighty","ninety"
+ ];
+
+ if(n<20)return ones[n];
+
+ let t=Math.floor(n/10);
+ let r=n%10;
+
+ return tens[t]+(r?" "+ones[r]:"");
+}
+
+function speakNumber(label){
+
+ if(!voiceEnabled||!label)return;
+ if(!("speechSynthesis" in window))return;
+
+ window.speechSynthesis.cancel();
+
+ let parts=label.split("-");
+ let letter=parts[0];
+ let number=Number(parts[1]);
+
+ let speech=new SpeechSynthesisUtterance(
+  letter+", "+numberWords(number)
+ );
+
+ speech.lang="en-US";
+ speech.rate=0.85;
+ speech.pitch=1;
+ speech.volume=1;
+
+ let voices=window.speechSynthesis.getVoices();
+
+ let englishVoice=voices.find(v=>
+  v.lang.toLowerCase().startsWith("en-us")
+ );
+
+ if(!englishVoice){
+  englishVoice=voices.find(v=>
+   v.lang.toLowerCase().startsWith("en")
+  );
+ }
+
+ if(englishVoice)speech.voice=englishVoice;
+
+ window.speechSynthesis.speak(speech);
+}
+
+function repeatNumber(){
+ if(lastCalledLabel){
+  speakNumber(lastCalledLabel);
+ }
+}
+
+// ===============================
+// AUTO MARK
+// ===============================
+
+function toggleAuto(){
+
+ autoMarkEnabled=!autoMarkEnabled;
+
+ let button=document.getElementById("autoButton");
+
+ if(autoMarkEnabled){
+  button.innerText="AUTO: ON";
+  button.classList.add("active");
+  autoMarkCalledNumbers();
+
+ }else{
+  button.innerText="AUTO: OFF";
+  button.classList.remove("active");
+ }
+}
+
+function autoMarkCalledNumbers(){
+
+ if(!autoMarkEnabled)return;
+
+ let card=document.getElementById("card");
+
+ for(let r=0;r<grid.length;r++){
+  for(let c=0;c<grid[r].length;c++){
+
+   let value=grid[r][c];
+
+   if(
+    value!==""&&
+    value!=="FREE"&&
+    called.includes(value)&&
+    !marked[r][c]
+   ){
+    marked[r][c]=true;
+
+    let index=r*grid[r].length+c;
+
+    card.children[index].classList.add("marked");
+   }
+  }
+ }
+
+ checkWinner();
+}
+
+// ===============================
+// SELECT GAME
+// ===============================
+
+function selectGame(selectedMode){
+
+ endGame();
+ clearClaimTimers();
+
+ mode=selectedMode;
+ called=[];
+ numbers=[];
+ gameFinished=false;
+ pendingWin=null;
+ missedWins.clear();
+ lastCalledLabel="";
+
+ document.getElementById("bingoButton").style.display="none";
+ document.getElementById("home").style.display="none";
+ document.getElementById("game").style.display="block";
+
+ document.getElementById("gameTitle").innerText=
+ mode+"-BALL BINGO";
+
+ document.getElementById("currentNumber").innerText="READY?";
+ document.getElementById("history").innerText="No numbers called yet";
+ document.getElementById("status").innerText="";
+
+ createCard();
+}
+
+// ===============================
+// CREATE CARD
+// ===============================
+
+function createCard(){
+
+ let headers=document.getElementById("cardHeaders");
+ let card=document.getElementById("card");
+
+ headers.innerHTML="";
+ card.innerHTML="";
+ grid=[];
+
+ let labels=mode===75?
+ ["B","I","N","G","O"]:
+ ["A","B","C","D","E","F","G","H","I"];
+
+ headers.style.gridTemplateColumns=
+ `repeat(${labels.length},minmax(0,1fr))`;
+
+ card.style.gridTemplateColumns=
+ `repeat(${labels.length},minmax(0,1fr))`;
+
+ labels.forEach(label=>{
+  let h=document.createElement("div");
+  h.className="column-label";
+  h.innerText=label;
+  headers.appendChild(h);
+ });
+
+ if(mode===75)create75Card();
+ else create90Card();
+
+ drawCard();
+}
+
+function create75Card(){
+
+ let ranges=[
+ [1,15],[16,30],[31,45],[46,60],[61,75]
+ ];
+
+ let columns=[];
+
+ for(let c=0;c<5;c++){
+
+  let nums=[];
+
+  for(let n=ranges[c][0];n<=ranges[c][1];n++){
+   nums.push(n);
+  }
+
+  shuffle(nums);
+  columns.push(nums.slice(0,5).sort((a,b)=>a-b));
+ }
+
+ for(let r=0;r<5;r++){
+
+  let row=[];
+
+  for(let c=0;c<5;c++){
+   row.push(r===2&&c===2?"FREE":columns[c][r]);
+  }
+
+  grid.push(row);
+ }
+}
+
+function create90Card(){
+
+ let base=[
+ [0,1,2,3,8],
+ [2,3,4,5,6],
+ [0,5,6,7,8]
+ ];
+
+ let middle=[1,2,3,4,5,6,7];
+ shuffle(middle);
+
+ let positions=base.map(row=>
+  row.map(c=>{
+   if(c===0||c===8)return c;
+   return middle[c-1];
+  })
+ );
+
+ grid=Array.from({length:3},()=>Array(9).fill(""));
+
+ for(let c=0;c<9;c++){
+
+  let occupiedRows=[];
+
+  for(let r=0;r<3;r++){
+   if(positions[r].includes(c)){
+    occupiedRows.push(r);
+   }
+  }
+
+  let min=c===0?1:c*10;
+  let max=c===8?90:c*10+9;
+
+  let nums=[];
+
+  for(let n=min;n<=max;n++){
+   nums.push(n);
+  }
+
+  shuffle(nums);
+
+  nums=nums.slice(0,occupiedRows.length)
+   .sort((a,b)=>a-b);
+
+  occupiedRows.forEach((r,i)=>{
+   grid[r][c]=nums[i];
+  });
+ }
+}
+
+// ===============================
+// DRAW CARD
+// ===============================
+
+function drawCard(){
+
+ let card=document.getElementById("card");
+ card.innerHTML="";
+
+ marked=grid.map(row=>row.map(value=>value==="FREE"));
+
+ for(let r=0;r<grid.length;r++){
+
+  for(let c=0;c<grid[r].length;c++){
+
+   let value=grid[r][c];
+   let cell=document.createElement("div");
+
+   cell.className="cell";
+
+   if(value===""){
+
+    cell.classList.add("empty");
+
+   }else if(value==="FREE"){
+
+    cell.classList.add("free");
+    cell.innerText="FREE";
+
+   }else{
+
+    cell.innerText=value;
+
+    cell.onclick=function(){
+     markCell(r,c,cell);
+    };
+   }
+
+   card.appendChild(cell);
+  }
+ }
+}
+
+// ===============================
+// MARK CALLED NUMBERS ONLY
+// ===============================
+
+function markCell(r,c,cell){
+
+ let value=grid[r][c];
+
+ if(value===""||value==="FREE")return;
+ if(marked[r][c])return;
+
+ if(!called.includes(value)){
+
+  document.getElementById("status").innerText=
+  "WAIT! THIS NUMBER HAS NOT BEEN CALLED YET.";
+
+  return;
+ }
+
+ marked[r][c]=true;
+ cell.classList.add("marked");
+
+ document.getElementById("status").innerText="";
+
+ checkWinner();
+}
+
+// ===============================
+// START GAME
+// ===============================
+
+function startGame(){
+
+ if(timer!==null||gameFinished)return;
+
+ clearClaimTimers();
+
+ pendingWin=null;
+ missedWins.clear();
+
+ document.getElementById("bingoButton").style.display="none";
+
+ numbers=[];
+
+ for(let n=1;n<=mode;n++){
+  numbers.push(n);
+ }
+
+ shuffle(numbers);
+
+ called=[];
+ lastCalledLabel="";
+
+ document.querySelectorAll(".cell").forEach(cell=>{
+  cell.classList.remove("marked");
+ });
+
+ marked=grid.map(row=>row.map(value=>value==="FREE"));
+
+ document.getElementById("status").innerText="";
+ document.getElementById("history").innerText="Game started!";
+
+ callNumber();
+
+ if(!gameFinished){
+  timer=setInterval(callNumber,5000);
+ }
+}
+
+// ===============================
+// CALL NUMBER
+// ===============================
+
+function callNumber(){
+
+ if(numbers.length===0){
+
+  endGame();
+
+  document.getElementById("currentNumber").innerText="GAME OVER";
+  document.getElementById("status").innerText="All numbers called!";
+
+  return;
+ }
+
+ let n=numbers.pop();
+
+ called.push(n);
+
+ lastCalledLabel=getLabel(n);
+
+ document.getElementById("currentNumber").innerText=
+ lastCalledLabel;
+
+ speakNumber(lastCalledLabel);
+
+ document.getElementById("history").innerText=
+ called.map(getLabel).join(" | ");
+
+ if(autoMarkEnabled){
+  autoMarkCalledNumbers();
+ }else{
+  checkWinner();
+ }
+}
+
+// ===============================
+// NUMBER LABEL
+// ===============================
+
+function getLabel(n){
+
+ if(mode===75){
+
+  if(n<=15)return "B-"+n;
+  if(n<=30)return "I-"+n;
+  if(n<=45)return "N-"+n;
+  if(n<=60)return "G-"+n;
+
+  return "O-"+n;
+ }
+
+ let letters=["A","B","C","D","E","F","G","H","I"];
+
+ let index=n<=9?0:Math.min(8,Math.floor(n/10));
+
+ return letters[index]+"-"+n;
+}
+
+// ===============================
+// WIN CHECK
+// ===============================
+
+function checkWinner(){
+
+ if(gameFinished||pendingWin!==null)return;
+
+ let rows=grid.length;
+ let cols=grid[0].length;
+ let lineLength=mode===75?5:3;
+
+ function counted(r,c){
+
+  if(grid[r][c]==="FREE")return true;
+
+  return marked[r][c]&&called.includes(grid[r][c]);
+ }
+
+ let candidates=[];
+
+ // FOUR CORNERS
+
+ if(
+  counted(0,0)&&
+  counted(0,cols-1)&&
+  counted(rows-1,0)&&
+  counted(rows-1,cols-1)
+ ){
+
+  candidates.push({
+   signature:"FOUR-CORNERS",
+   message:"FOUR CORNERS!"
+  });
+ }
+
+ // HORIZONTAL, VERTICAL AND DIAGONAL
+
+ let directions=[
+  [0,1],
+  [1,0],
+  [1,1],
+  [1,-1]
+ ];
+
+ for(let r=0;r<rows;r++){
+
+  for(let c=0;c<cols;c++){
+
+   for(let [dr,dc] of directions){
+
+    let positions=[];
+
+    for(let i=0;i<lineLength;i++){
+
+     let nr=r+dr*i;
+     let nc=c+dc*i;
+
+     if(
+      nr>=0&&nr<rows&&
+      nc>=0&&nc<cols&&
+      counted(nr,nc)
+     ){
+      positions.push(nr+"-"+nc);
+     }else{
+      break;
+     }
+    }
+
+    if(positions.length===lineLength){
+
+     candidates.push({
+      signature:"LINE-"+positions.join("-"),
+      message:"BINGO! LINE COMPLETED!"
+     });
+    }
+   }
+  }
+ }
+
+ for(let candidate of candidates){
+
+  if(!missedWins.has(candidate.signature)){
+   showBingoClaim(candidate);
+   return;
+  }
+ }
+}
+
+// ===============================
+// CLAIM COUNTDOWN
+// ===============================
+
+function showBingoClaim(candidate){
+
+ pendingWin=candidate;
+ claimSeconds=5;
+
+ let button=document.getElementById("bingoButton");
+
+ button.style.display="inline-block";
+ button.innerText="BINGO! (5)";
+
+ document.getElementById("status").innerText=
+ "YOU HAVE BINGO! CLAIM WITHIN 5 SECONDS!";
+
+ countdownTimer=setInterval(()=>{
+
+  claimSeconds--;
+
+  if(pendingWin!==null){
+   button.innerText="BINGO! ("+claimSeconds+")";
+  }
+
+ },1000);
+
+ claimTimer=setTimeout(()=>{
+
+  if(pendingWin===null)return;
+
+  missedWins.add(pendingWin.signature);
+  pendingWin=null;
+
+  clearClaimTimers();
+
+  button.style.display="none";
+
+  document.getElementById("status").innerText=
+  "TIME EXPIRED! GAME CONTINUES!";
+
+  checkWinner();
+
+ },5000);
+}
+
+function claimBingo(){
+
+ if(pendingWin===null||gameFinished)return;
+
+ let message=pendingWin.message;
+
+ pendingWin=null;
+
+ clearClaimTimers();
+
+ document.getElementById("bingoButton").style.display="none";
+
+ win(message);
+}
+
+function clearClaimTimers(){
+
+ if(claimTimer!==null){
+  clearTimeout(claimTimer);
+  claimTimer=null;
+ }
+
+ if(countdownTimer!==null){
+  clearInterval(countdownTimer);
+  countdownTimer=null;
+ }
+}
+
+// ===============================
+// WIN
+// ===============================
+
+function win(message){
+
+ gameFinished=true;
+
+ endGame();
+ clearClaimTimers();
+
+ document.getElementById("bingoButton").style.display="none";
+
+ document.getElementById("status").innerText=
+ "WINNER! "+message;
+
+ if(voiceEnabled&&"speechSynthesis" in window){
+
+  window.speechSynthesis.cancel();
+
+  let speech=new SpeechSynthesisUtterance(
+   "Bingo! Congratulations! You are the winner!"
+  );
+
+  speech.lang="en-US";
+  window.speechSynthesis.speak(speech);
+ }
+
+ alert("BINGO ETHIOPIA!\nCONGRATULATIONS!\n"+message);
+}
+
+// ===============================
+// END GAME
+// ===============================
+
+function endGame(){
+
+ if(timer!==null){
+  clearInterval(timer);
+  timer=null;
+ }
+
+ if("speechSynthesis" in window){
+  window.speechSynthesis.cancel();
+ }
+}
+
+// ===============================
+// HOME
+// ===============================
+
+function goHome(){
+
+ endGame();
+ clearClaimTimers();
+
+ pendingWin=null;
+ gameFinished=false;
+ lastCalledLabel="";
+
+ document.getElementById("bingoButton").style.display="none";
+ document.getElementById("game").style.display="none";
+ document.getElementById("home").style.display="block";
+}
+
+// ===============================
+// MULTIPLAYER CONNECTION
+// ===============================
+
+
+function setupCardSelectors(){
+  for(let i=1;i<=3;i++){
+    const select=document.getElementById("cardNumber"+i);
+    if(!select) continue;
+
+    const first=select.options[0];
+    select.innerHTML="";
+    select.appendChild(first);
+
+    for(let n=1;n<=600;n++){
+      const option=document.createElement("option");
+      option.value=n;
+      option.textContent="Card "+n;
+      select.appendChild(option);
+    }
+  }
+}
+setupCardSelectors();
+
+const savedRoomId = localStorage.getItem("bingoRoomId");
+if(savedRoomId){
+ const roomInput = document.getElementById("roomId");
+ if(roomInput) roomInput.value = savedRoomId;
+}
+
+let socket=null;
+let currentRoom="";
+
+const connectionStatus=
+ document.getElementById("connectionStatus");
+
+if(typeof io==="function"){
+
+ socket=io(window.location.origin);
+
+ socket.on("connect",()=>{
+  connectionStatus.innerText="🟢 SERVER CONNECTED";
+ });
+
+ socket.on("disconnect",()=>{
+  connectionStatus.innerText="🔴 SERVER DISCONNECTED";
+ });
+
+ socket.on("connect_error",()=>{
+  connectionStatus.innerText="🔴 CONNECTION ERROR";
+ });
+
+ socket.on("joinedRoom",data=>{
+
+  currentRoom=data.roomId;
+
+  document.getElementById("roomStatus").innerText=
+   "Joined Room: "+data.roomId;
+
+  document.getElementById("playerCount").innerText=
+   "Players: "+data.playerCount;
+
+  const selectedCards = data.cardNumbers || [data.cardNumber];
+  document.getElementById("roomMessage").innerText=
+   "Connected! Your Cards: "+selectedCards.join(", ");
+
+  window.myCardNumbers = selectedCards;
+ });
+
+ socket.on("roomUpdate",data=>{
+
+  document.getElementById("playerCount").innerText=
+   "Players: "+data.playerCount;
+ });
+
+ socket.on("playerJoined",data=>{
+
+  const cards = data.cardNumbers || [data.cardNumber];
+
+  document.getElementById("roomMessage").innerText=
+   data.playerName+" joined the room! Cards: "+cards.join(", ");
+ });
+
+ socket.on("playerLeft",data=>{
+
+  document.getElementById("roomMessage").innerText=
+   data.playerName+" left the room.";
+ });
+
+ socket.on("joinError",message=>{
+  alert(message);
+ });
+
+}else{
+
+ connectionStatus.innerText=
+ "🔴 Socket.IO NOT LOADED";
+}
+
+function createRoom(){
+
+ if(!socket||!socket.connected){
+  alert("Server is not connected. Check Termux.");
+  return;
+ }
+
+ let room="BINGO-"+Math.floor(1000+Math.random()*9000);
+
+ document.getElementById("roomId").value=room;
+ localStorage.setItem("bingoRoomId",room);
+
+ joinRoomNow();
+}
+
+function joinRoomNow(){
+
+ if(!socket||!socket.connected){
+  alert("Server is not connected. Check Termux.");
+  return;
+ }
+
+ let name=(localStorage.getItem("bingoPlayerName") ||
+  document.getElementById("playerName").value).trim();
+
+ if(name){
+  localStorage.setItem("bingoPlayerName",name);
+  document.getElementById("playerName").value=name;
+ }
+ let room=document.getElementById("roomId").value.trim();
+
+ if(!name){
+  alert("Please enter your player name");
+  return;
+ }
+
+ if(!room){
+  alert("Please enter a Room ID");
+  return;
+ }
+ localStorage.setItem("bingoRoomId",room);
+
+ socket.emit("joinRoom",{
+  playerName:name,
+  roomId:room
+ });
+}
+
+</script>
+
+</body>
+</html>
