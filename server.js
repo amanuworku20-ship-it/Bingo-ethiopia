@@ -2,12 +2,152 @@ const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
 const cors = require("cors");
+const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
+const { getDatabase } = require("./database");
+
+require("dotenv").config();
+
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  throw new Error("JWT_SECRET environment variable is required.");
+}
+
+
 
 const app = express();
 const server = http.createServer(app);
 
 app.use(cors());
 app.use(express.json());
+
+function createUsername() {
+  return "Player-" + Math.floor(100000 + Math.random() * 900000);
+}
+
+function createToken(user) {
+  return jwt.sign(
+    { userId: user.id, username: user.username },
+    JWT_SECRET,
+    { expiresIn: "30d" }
+  );
+}
+
+app.post("/api/register", async (req, res) => {
+  try {
+    const phone = String(req.body.phone || "").trim();
+    const password = String(req.body.password || "");
+
+    if (!/^\+?[0-9]{9,15}$/.test(phone)) {
+      return res.status(400).json({ error: "Invalid phone number." });
+    }
+
+    if (password.length < 8) {
+      return res.status(400).json({ error: "Password must be at least 8 characters." });
+    }
+
+    const db = await getDatabase();
+    await db.read();
+
+    if (db.data.users.some(user => user.phone === phone)) {
+      return res.status(409).json({ error: "Phone number already registered." });
+    }
+
+    const username = createUsername();
+    const passwordHash = await bcrypt.hash(password, 12);
+
+    const user = {
+      id: require("crypto").randomUUID(),
+      phone,
+      username,
+      passwordHash,
+      coins: 0,
+      role: "player",
+      createdAt: new Date().toISOString()
+    };
+
+    db.data.users.push(user);
+    await db.write();
+
+    return res.status(201).json({
+      message: "Registration successful.",
+      token: createToken(user),
+      username: user.username,
+      coins: user.coins
+    });
+  } catch (error) {
+    console.error("Registration error:", error);
+    return res.status(500).json({ error: "Registration failed." });
+  }
+});
+
+app.post("/api/login", async (req, res) => {
+  try {
+    const phone = String(req.body.phone || "").trim();
+    const password = String(req.body.password || "");
+
+    const db = await getDatabase();
+    await db.read();
+
+    const user = db.data.users.find(item => item.phone === phone);
+
+    if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
+      return res.status(401).json({ error: "Invalid phone number or password." });
+    }
+
+    return res.json({
+      message: "Login successful.",
+      token: createToken(user),
+      username: user.username,
+      coins: user.coins
+    });
+  } catch (error) {
+    console.error("Login error:", error);
+    return res.status(500).json({ error: "Login failed." });
+  }
+});
+
+
+
+function authenticateToken(req, res, next) {
+  const header = req.headers.authorization || "";
+  const token = header.startsWith("Bearer ") ? header.slice(7) : "";
+
+  if (!token) {
+    return res.status(401).json({ error: "Authentication required." });
+  }
+
+  try {
+    req.user = jwt.verify(token, JWT_SECRET);
+    next();
+  } catch (error) {
+    return res.status(401).json({ error: "Invalid or expired token." });
+  }
+}
+
+app.get("/api/me", authenticateToken, async (req, res) => {
+  try {
+    const db = await getDatabase();
+    await db.read();
+
+    const user = db.data.users.find(item => item.id === req.user.userId);
+
+    if (!user) {
+      return res.status(404).json({ error: "User not found." });
+    }
+
+    return res.json({
+      username: user.username,
+      coins: user.coins,
+      role: user.role
+    });
+  } catch (error) {
+    console.error("Profile error:", error);
+    return res.status(500).json({ error: "Could not load profile." });
+  }
+});
+
+
 app.use(express.static("public"));
 
 const io = new Server(server, {
@@ -77,12 +217,29 @@ function stopAutoCall(room) {
   }
 }
 
+io.use((socket, next) => {
+  const token = socket.handshake.auth && socket.handshake.auth.token;
+
+  if (!token) {
+    return next(new Error("Authentication required."));
+  }
+
+  try {
+    const user = jwt.verify(token, JWT_SECRET);
+    socket.data.userId = user.userId;
+    socket.data.username = user.username;
+    next();
+  } catch (error) {
+    next(new Error("Invalid or expired login session."));
+  }
+});
+
 io.on("connection", (socket) => {
   console.log("Connected:", socket.id);
 
   socket.on("joinRoom", (data = {}) => {
-    const roomId = String(data.roomId || "").trim();
-    const playerName = String(data.playerName || "Player")
+    const roomId = "BINGO-ETHIOPIA";
+    const playerName = String(socket.data.username || "Player")
       .trim()
       .slice(0, 30);
 

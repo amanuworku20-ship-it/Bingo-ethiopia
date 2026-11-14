@@ -112,13 +112,6 @@ input{
  margin:6px;
 }
 
-#depositHistory{
- font-size:10px;
- line-height:1.6;
- color:#555;
- margin-top:6px;
-}
-
 #connectionStatus{
  color:#1764c0;
  font-weight:900;
@@ -233,16 +226,23 @@ input{
 
 <body>
 
+
 <header>BINGO ETHIOPIA</header>
+
+<section id="authPanel" style="background:#f5f7fb;color:#172238;border:2px solid #e1e5eb;padding:16px;margin:12px auto;width:calc(100% - 24px);max-width:430px;border-radius:18px;">
+ <h2>WELCOME TO BINGO ETHIOPIA</h2>
+ <p>Register or login with your phone number</p>
+ <input id="authPhone" type="tel" placeholder="Phone number" autocomplete="tel" style="width:100%;padding:12px;margin:6px 0;">
+ <input id="authPassword" type="password" placeholder="Password (minimum 8 characters)" autocomplete="current-password" style="width:100%;padding:12px;margin:6px 0;">
+ <button class="gold" onclick="registerUser()">REGISTER</button>
+ <button class="blue" onclick="loginUser()">LOGIN</button>
+ <p id="authMessage"></p>
+</section>
+
 
 <div id="wallet">
  <h3>🪙 VIRTUAL COIN WALLET</h3>
  <div id="coinBalance">1,000 Coins</div>
- <p>FREE DEMO COIN DEPOSIT</p>
- <button class="gold" onclick="depositCoins(100)">+100</button>
- <button class="gold" onclick="depositCoins(500)">+500</button>
- <button class="gold" onclick="depositCoins(1000)">+1,000</button>
- <div id="depositHistory">No deposit yet</div>
 </div>
 
 <section id="home">
@@ -251,7 +251,7 @@ input{
  <div id="roomPanel">
   <h3>🌐 MULTIPLAYER ROOM</h3>
 
-  <input id="playerName"
+  <input type="hidden" id="playerName"
    placeholder="Enter your player name"
    autocomplete="name">
 
@@ -266,7 +266,7 @@ input{
    });
   </script>
 
-  <input id="roomId"
+  <input type="hidden" id="roomId"
    placeholder="Enter Room ID">
 
   <p>Choose Your Cards (1-3 cards)</p>
@@ -326,7 +326,7 @@ input{
  </div>
 
  <button class="green" onclick="startGame()">START</button>
- <button class="red" onclick="endGame()">END</button>
+ <button class="red" onclick="requestEndGame()">END</button>
  <button class="blue" onclick="goHome()">HOME</button>
 
  <h3>Called Numbers</h3>
@@ -362,32 +362,22 @@ let lastCalledLabel="";
 // VIRTUAL COIN WALLET
 // ===============================
 
-let coinBalance=Number(localStorage.getItem("bingoCoins"));
-
-if(!Number.isFinite(coinBalance)){
- coinBalance=1000;
-}
-
-let depositRecords=[];
+let coinBalance=0;
 
 function updateWallet(){
- document.getElementById("coinBalance").innerText=
- coinBalance.toLocaleString()+" Coins";
-
- localStorage.setItem("bingoCoins",coinBalance);
+ const balance=document.getElementById("coinBalance");
+ if(balance){
+  balance.innerText=coinBalance.toLocaleString()+" Coins";
+ }
 }
 
-updateWallet();
-
-function depositCoins(amount){
- coinBalance+=amount;
+function setWalletBalance(amount){
+ coinBalance=Math.max(0,Number(amount)||0);
  updateWallet();
-
- depositRecords.unshift("+"+amount+" Coins - Demo Deposit");
-
- document.getElementById("depositHistory").innerHTML=
- depositRecords.slice(0,5).join("<br>");
 }
+
+// Coins are loaded from the authenticated server profile only.
+setWalletBalance(0);
 
 // ===============================
 // RANDOM SHUFFLE
@@ -764,79 +754,24 @@ function markCell(r,c,cell){
 // START GAME
 // ===============================
 
+
 function startGame(){
 
- if(timer!==null||gameFinished)return;
-
- clearClaimTimers();
-
- pendingWin=null;
- missedWins.clear();
-
- document.getElementById("bingoButton").style.display="none";
-
- numbers=[];
-
- for(let n=1;n<=mode;n++){
-  numbers.push(n);
- }
-
- shuffle(numbers);
-
- called=[];
- lastCalledLabel="";
-
- document.querySelectorAll(".cell").forEach(cell=>{
-  cell.classList.remove("marked");
- });
-
- marked=grid.map(row=>row.map(value=>value==="FREE"));
-
- document.getElementById("status").innerText="";
- document.getElementById("history").innerText="Game started!";
-
- callNumber();
-
- if(!gameFinished){
-  timer=setInterval(callNumber,5000);
- }
-}
-
-// ===============================
-// CALL NUMBER
-// ===============================
-
-function callNumber(){
-
- if(numbers.length===0){
-
-  endGame();
-
-  document.getElementById("currentNumber").innerText="GAME OVER";
-  document.getElementById("status").innerText="All numbers called!";
-
+ if(!socket || !socket.connected || !currentRoom){
+  alert("Please join a room first.");
   return;
  }
 
- let n=numbers.pop();
+ if(serverGameStarted || startRequestPending || gameFinished)return;
 
- called.push(n);
+ startRequestPending=true;
+ document.getElementById("status").innerText="Starting game...";
+ socket.emit("startGameRequest",{mode:mode});
+}
 
- lastCalledLabel=getLabel(n);
-
- document.getElementById("currentNumber").innerText=
- lastCalledLabel;
-
- speakNumber(lastCalledLabel);
-
- document.getElementById("history").innerText=
- called.map(getLabel).join(" | ");
-
- if(autoMarkEnabled){
-  autoMarkCalledNumbers();
- }else{
-  checkWinner();
- }
+// Number calling is controlled by the server only.
+function callNumber(){
+ return;
 }
 
 // ===============================
@@ -1122,13 +1057,52 @@ if(savedRoomId){
 
 let socket=null;
 let currentRoom="";
+let isHost=false;
+let serverGameStarted=false;
+let startRequestPending=false;
+let serverAutoCall=false;
+
+function applyServerGameState(state){
+ if(!state)return;
+
+ mode=Number(state.mode)||mode;
+ called=Array.isArray(state.called)?state.called:[];
+ serverGameStarted=Boolean(state.gameStarted);
+ serverAutoCall=Boolean(state.autoCall);
+
+ if(called.length){
+  lastCalledLabel=getLabel(called[called.length-1]);
+  document.getElementById("currentNumber").innerText=lastCalledLabel;
+  document.getElementById("history").innerText=called.map(getLabel).join(" | ");
+ }else{
+  lastCalledLabel="";
+  document.getElementById("currentNumber").innerText="READY?";
+  document.getElementById("history").innerText=
+   serverGameStarted?"Game started!":"No numbers called yet";
+ }
+}
+
+function requestEndGame(){
+ if(!socket || !socket.connected || !currentRoom){
+  alert("Please join a room first.");
+  return;
+ }
+ socket.emit("endGameRequest");
+}
 
 const connectionStatus=
  document.getElementById("connectionStatus");
 
-if(typeof io==="function"){
+function connectSocket(token){
+ if(typeof io!=="function"){
+  connectionStatus.innerText="🔴 Socket.IO NOT LOADED";
+  return;
+ }
+ if(socket) socket.disconnect();
 
- socket=io(window.location.origin);
+ socket=io(window.location.origin,{
+  auth:{token:token}
+ });
 
  socket.on("connect",()=>{
   connectionStatus.innerText="🟢 SERVER CONNECTED";
@@ -1145,6 +1119,9 @@ if(typeof io==="function"){
  socket.on("joinedRoom",data=>{
 
   currentRoom=data.roomId;
+  isHost=Boolean(data.isHost);
+  startRequestPending=false;
+  if(data.gameState)applyServerGameState(data.gameState);
 
   document.getElementById("roomStatus").innerText=
    "Joined Room: "+data.roomId;
@@ -1183,58 +1160,193 @@ if(typeof io==="function"){
   alert(message);
  });
 
-}else{
+ socket.on("gameStarted",data=>{
+  mode=Number(data.mode)||mode;
+  called=[];
+  numbers=[];
+  gameFinished=false;
+  serverGameStarted=true;
+  startRequestPending=false;
+  clearClaimTimers();
+  pendingWin=null;
+  missedWins.clear();
+  lastCalledLabel="";
+  document.getElementById("bingoButton").style.display="none";
+  document.querySelectorAll(".cell").forEach(cell=>{
+   cell.classList.remove("marked");
+  });
+  marked=grid.map(row=>row.map(value=>value==="FREE"));
+  document.getElementById("currentNumber").innerText="READY?";
+  document.getElementById("history").innerText="Game started!";
+  document.getElementById("status").innerText="";
 
- connectionStatus.innerText=
- "🔴 Socket.IO NOT LOADED";
+  // The host enables automatic number calling.
+  if(isHost){
+   socket.emit("autoCallRequest",{enabled:true});
+  }
+ });
+
+ socket.on("numberCalled",data=>{
+  if(!data || typeof data.number!=="number")return;
+
+  mode=Number(data.mode)||mode;
+  called=Array.isArray(data.called)?data.called:[...called,data.number];
+  serverGameStarted=true;
+
+  lastCalledLabel=getLabel(data.number);
+  document.getElementById("currentNumber").innerText=lastCalledLabel;
+  speakNumber(lastCalledLabel);
+  document.getElementById("history").innerText=called.map(getLabel).join(" | ");
+
+  if(autoMarkEnabled){
+   autoMarkCalledNumbers();
+  }else{
+   checkWinner();
+  }
+ });
+
+ socket.on("gameState",data=>{
+  applyServerGameState(data);
+ });
+
+ socket.on("autoCallChanged",data=>{
+  serverAutoCall=Boolean(data.enabled);
+ });
+
+ socket.on("gameEnded",data=>{
+  serverGameStarted=false;
+  serverAutoCall=false;
+  startRequestPending=false;
+  endGame();
+  gameFinished=true;
+  document.getElementById("currentNumber").innerText="GAME OVER";
+  document.getElementById("status").innerText=
+   data && data.message ? data.message : "Game ended.";
+  document.getElementById("bingoButton").style.display="none";
+ });
+
+ socket.on("gameError",message=>{
+  startRequestPending=false;
+  alert(message);
+ });
+
 }
 
-function createRoom(){
 
- if(!socket||!socket.connected){
-  alert("Server is not connected. Check Termux.");
+let authToken=localStorage.getItem("bingoAuthToken")||"";
+let authUsername="";
+
+function showAuthenticatedApp(profile){
+ authUsername=profile.username;
+ document.getElementById("authPanel").style.display="none";
+ document.getElementById("wallet").style.display="block";
+ document.getElementById("home").style.display="block";
+ document.getElementById("playerName").value=authUsername;
+ setWalletBalance(profile.coins);
+}
+
+async function submitAuth(endpoint){
+ const phone=document.getElementById("authPhone").value.trim();
+ const password=document.getElementById("authPassword").value;
+ const message=document.getElementById("authMessage");
+
+ if(!phone||!password){
+  message.innerText="Enter phone number and password.";
   return;
  }
 
- let room="BINGO-"+Math.floor(1000+Math.random()*9000);
+ message.innerText="Please wait...";
 
- document.getElementById("roomId").value=room;
- localStorage.setItem("bingoRoomId",room);
+ try{
+  const response=await fetch(endpoint,{
+   method:"POST",
+   headers:{"Content-Type":"application/json"},
+   body:JSON.stringify({phone,password})
+  });
 
+  const data=await response.json();
+
+  if(!response.ok){
+   throw new Error(data.error||"Authentication failed.");
+  }
+
+  authToken=data.token;
+  localStorage.setItem("bingoAuthToken",authToken);
+
+  showAuthenticatedApp(data);
+  message.innerText="";
+  connectSocket(authToken);
+
+ }catch(error){
+  message.innerText=error.message;
+ }
+}
+
+function registerUser(){
+ submitAuth("/api/register");
+}
+
+function loginUser(){
+ submitAuth("/api/login");
+}
+
+async function restoreLogin(){
+ document.getElementById("wallet").style.display="none";
+ document.getElementById("home").style.display="none";
+
+ if(!authToken) return;
+
+ try{
+  const response=await fetch("/api/me",{
+   headers:{Authorization:"Bearer "+authToken}
+  });
+
+  if(!response.ok) throw new Error("Session expired");
+
+  const profile=await response.json();
+  showAuthenticatedApp(profile);
+  connectSocket(authToken);
+
+ }catch(error){
+  localStorage.removeItem("bingoAuthToken");
+  authToken="";
+  document.getElementById("authPanel").style.display="block";
+  document.getElementById("authMessage").innerText=
+   "Please login again.";
+ }
+}
+
+restoreLogin();
+
+function getPlayerName(){
+ if(!authUsername){
+  return "";
+ }
+ document.getElementById("playerName").value=authUsername;
+ return authUsername;
+}
+
+function createRoom(){
  joinRoomNow();
 }
 
 function joinRoomNow(){
-
  if(!socket||!socket.connected){
   alert("Server is not connected. Check Termux.");
   return;
  }
 
- let name=(localStorage.getItem("bingoPlayerName") ||
-  document.getElementById("playerName").value).trim();
+ const cardNumbers = [1,2,3]
+  .map(i => document.getElementById("cardNumber"+i).value)
+  .filter(v => v !== "")
+  .map(Number);
 
- if(name){
-  localStorage.setItem("bingoPlayerName",name);
-  document.getElementById("playerName").value=name;
- }
- let room=document.getElementById("roomId").value.trim();
-
- if(!name){
-  alert("Please enter your player name");
+ if(cardNumbers.length < 1 || cardNumbers.length > 3){
+  alert("Please select 1 to 3 cards.");
   return;
  }
 
- if(!room){
-  alert("Please enter a Room ID");
-  return;
- }
- localStorage.setItem("bingoRoomId",room);
-
- socket.emit("joinRoom",{
-  playerName:name,
-  roomId:room
- });
+ socket.emit("joinRoom",{cardNumbers});
 }
 
 </script>
