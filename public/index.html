@@ -1112,8 +1112,9 @@ function connectSocket(token){
   connectionStatus.innerText="🔴 SERVER DISCONNECTED";
  });
 
- socket.on("connect_error",()=>{
-  connectionStatus.innerText="🔴 CONNECTION ERROR";
+ socket.on("connect_error",(error)=>{
+  connectionStatus.innerText="🔴 CONNECTION ERROR: "+error.message;
+  console.error("Socket connection error:",error.message);
  });
 
  socket.on("joinedRoom",data=>{
